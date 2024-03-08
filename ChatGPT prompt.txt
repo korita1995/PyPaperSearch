@@ -1,0 +1,39 @@
+QT5を用いたアプリケーションを作りたい。
+アプリデザインは以下の通り。小さなプルダウンリストと、その下にウィンドウの横サイズよりわずかに同程度の幅をもつテキストボックス①、更にその下に「入力欄から検索」ボタン、その横に同程度の大きさの「クリップボードから」検索ボタン、更にその2つのボタンの下に以下の機能による検索結果がテキストボックス②に出力される。プルダウンリストは、「Pubmed検索」、「Crossref検索」、「arXiv検索」から選択する形式。テキストボックス①はユーザーが手動で入力することも可能で、初期状態では「入力欄」と表示されている。
+定義①：「Pubmedキーワード検索」とは、テキストボックスに入力されたキーワードを、以下のURL末尾に追加して検索することである。
+”https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&sort=relevance&retmode=json&term=”
+Pubmedキーワード検索を行った後に、Pubmedキーワード検索の結果得られるJsonオブジェクトの、"esearchresult"というkeyのvalueのうち、”idlist”というkeyの１つ目のvalueを出力する。この出力結果をもとに、以下で定義する「Pubmed　ID検索」を行う。
+定義②：「Pubmed　ID検索」とは、以下のURL末尾に8桁の整数からなるPubmed　IDを追加して検索することと定義する。
+"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id="
+Pubmed ID検索の結果の一例を以下に示す。
+{
+	"result": {
+		"19525943": {
+			"uid": "19525943",
+			"pubdate": "2009 Jul",
+			"source": "Nat Neurosci",
+			"authors": [
+				{
+					"name": "Karlsson MP",
+					"authtype": "Author",
+					"clusterid": ""
+				},
+				{
+					"name": "Frank LM",
+					"authtype": "Author",
+					"clusterid": ""
+				}
+			],
+			"lastauthor": "Frank LM",
+			"title": "Awake replay of remote experiences in the hippocampus.",
+		},
+	}
+}
+このようなJsonオブジェクトのうち、authorsの１番目、authorsの最後、source、pub dateのうち４桁の出版年、titleを抽出し、これらの情報を以下のように要約してテキストボックス②に出力する。
+「Karlsson Frank (Nat Neurosci 2009) Awake replay of remote experiences in the hippocampus」
+アプリの機能は以下の通り。
+（1）ウィンドウにPDFをドラッグ＆ドロップをすると、PDFのファイル名を取得してテキストボックス①にファイル名をテキストとして出力し、それをもとにPubmedキーワード検索を行う。
+（２）「入力欄から検索」ボタンを押したときに、テキストボックス内のテキストを取得し、そのテキストをもとにPubmedキーワード検索を行う。
+（３）「クリップボードから検索」ボタンを押したときに、クリップボードのテキストを取得し、そのテキストをもとにPubmedキーワード検索を行う。
+なお、（１）－（３）いずれの場合でも、取得したテキストが8桁の整数からなる文字列であった場合、Pubmed　ID検索を行う。Pubmed　ID検索とは、
+また、（１）－（３）において、出力結果がNoneであったとき、「エラー：文献が見つかりませんでした」というエラーメッセージを表示するものとする。
