@@ -3,15 +3,16 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdi
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QClipboard, QGuiApplication
 import requests
+import re
 
-class PubmedSearchApp(QWidget):
+class SearchApp(QWidget):
     def __init__(self):
         super().__init__()
 
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('Pubmed検索アプリ')
+        self.setWindowTitle('文献検索アプリ')
         self.setGeometry(100, 100, 500, 300)
 
         layout = QVBoxLayout()
@@ -55,97 +56,181 @@ class PubmedSearchApp(QWidget):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent):
-        pdf_file_path = event.mimeData().urls()[0].toLocalFile()
-        self.textbox1.setText(f'ドロップされたPDFファイル: {pdf_file_path}')
+        file_path = event.mimeData().urls()[0].toLocalFile()
+        self.textbox1.setText(f'ドロップされたファイル: {file_path}')
 
-        # PDFのファイル名を取得
-        pdf_file_name = pdf_file_path.split("/")[-1]
+        # ファイル名を取得
+        file_name = file_path.split("/")[-1]
 
-        # Pubmedキーワード検索
-        self.perform_pubmed_search(pdf_file_name)
+        # キーワード検索を行う
+        self.perform_search(file_name)
 
     def search_from_input(self):
         search_term = self.textbox1.text()
         search_type = self.search_type_combo.currentText()
-        self.perform_search(search_type, search_term)
+        self.perform_search(search_term, search_type)
 
     def search_from_clipboard(self):
         clipboard_text = QGuiApplication.clipboard().text()
         self.textbox1.setText(clipboard_text)
         search_type = self.search_type_combo.currentText()
-        self.perform_search(search_type, clipboard_text)
+        self.perform_search(clipboard_text, search_type)
 
-    def perform_search(self, search_type, search_term):
-        if search_term.isdigit() and len(search_term) == 8:
-            # Pubmed ID検索
-            search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={search_term}'
-        else:
-            # それ以外の検索
-            if search_type == 'Pubmed検索':
-                search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&sort=relevance&retmode=json&term={search_term}'
-            elif search_type == 'Crossref検索':
-                # Crossref検索のURLを追加
-                search_url = f'https://api.crossref.org/works?query={search_term}'
-            elif search_type == 'arXiv検索':
-                # arXiv検索のURLを追加
-                search_url = f'http://export.arxiv.org/api/query?search_query={search_term}&start=0&max_results=1'
+    def perform_search(self, search_term, search_type):
+        if search_type == 'Pubmed検索':
+            # Pubmed検索のURLを追加
+            search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&sort=relevance&retmode=json&term={search_term}'
+
+            result_data = self.perform_search_request(search_url)
+
+            # 結果がある場合は要約して表示
+            if result_data:
+                self.show_pubmed_summary(result_data)
             else:
-                return
+                self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-        result_id_list = self.perform_search_request(search_url)
+        elif search_type == 'Crossref検索':
+            # Crossref検索のURLを追加
+            search_url = f'https://api.crossref.org/works?sort=relevance&query={search_term}'
 
-        # 検索結果から1つ目のIDを出力
-        if result_id_list:
-            self.textbox2.setText(f'{search_type}検索結果のIDリストの最初の値: {result_id_list[0]}')
-            self.perform_pubmed_id_search(result_id_list[0])
-        else:
-            self.textbox2.setText('エラー: 文献が見つかりませんでした')
+            result_data = self.perform_search_request(search_url)
 
-    def perform_search_request(self, url):
+            # 結果がある場合は要約して表示
+            if result_data:
+                self.show_crossref_summary(result_data)
+            else:
+                self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+        elif search_type == 'arXiv検索':
+            # arXiv検索のURLを追加
+            search_url = f'http://export.arxiv.org/api/query?search_query={search_term}&start=0&max_results=1'
+
+            result_data = self.perform_search_request(search_url)
+
+            # 結果がある場合は要約して表示
+            if result_data:
+                self.show_arxiv_summary(result_data)
+            else:
+                self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+    def perform_search_request(self, search_url):
         try:
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
-
-            # Jsonオブジェクトから"idlist"の1つ目の値を取得
-            id_list = data.get('esearchresult', {}).get('idlist', [])
-
-            return id_list
-        except Exception as e:
-            print(f'検索エラー: {e}')
-            return []
-
-    def perform_pubmed_id_search(self, pubmed_id):
-        try:
-            # Pubmed ID検索のURLを構築
-            search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
             response = requests.get(search_url)
             response.raise_for_status()
-            data = response.json()
+            result_data = response.json()
+            return result_data
+        except Exception as e:
+            print(f'検索エラー: {e}')
+            return None
 
-            # Jsonオブジェクトから必要な情報を抽出
-            result_data = data.get('result', {}).get(pubmed_id, {})
-            authors = result_data.get('authors', [])
-            source = result_data.get('source', '')
-            pub_date = result_data.get('pubdate', '').split()[0]
-            last_author = result_data.get('lastauthor', '').split()[0]
-            title = result_data.get('title', '')
+    def show_pubmed_summary(self, result_data):
+        try:
+            if 'esearchresult' in result_data:
+                # Pubmedキーワード検索の結果から必要な情報を抽出
+                result_data = result_data['esearchresult']
+                id_list = result_data.get('idlist', [])
 
-            
-            # 著者名を要約
-            author_names = [f"{author.get('name', '')}" for author in authors]
-            first_author = author_names[0].split()[0]
+                if not id_list:
+                    self.textbox2.setText('エラー: 文献が見つかりませんでした')
+                    return
 
-            # 要約した情報をテキストボックスに表示
-            summary_text = f'{first_author}, {last_author} ({source} {pub_date}) {title}'
-            self.textbox2.setText(summary_text)
+                # Pubmed ID検索を行う
+                pubmed_id = id_list[0]
+                pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
+                pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
+
+                if pubmed_id_result:
+                    # Pubmed ID検索の結果から必要な情報を抽出
+                    pub_date, source, authors, last_author, title = (
+                        pubmed_id_result['result'][pubmed_id].get('pubdate', '').split()[0],
+                        pubmed_id_result['result'][pubmed_id].get('source', ''),
+                        pubmed_id_result['result'][pubmed_id].get('authors', []),
+                        pubmed_id_result['result'][pubmed_id].get('lastauthor', '').split()[0],
+                        pubmed_id_result['result'][pubmed_id].get('title', ''),
+                    )
+
+                    # 著者名を要約
+                    author_names = [f"{author.get('name', '')}" for author in authors]
+                    first_author = author_names[0].split()[0]
+
+                    # 要約した情報をテキストボックスに表示
+                    summary_text = f'{first_author}, {last_author} ({source} {pub_date}) {title}'
+                    self.textbox2.setText(summary_text)
 
         except Exception as e:
             print(f'Pubmed ID検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
+    def show_crossref_summary(self, result_data):
+        try:
+            if 'message' in result_data and result_data['message'].get('items'):
+                # Crossref検索の結果から必要な情報を抽出
+                items = result_data['message']['items']
+                item = items[0]
+
+                # DOI検索の場合はDOIを使って検索
+                if 'DOI' in item:
+                    doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
+                    doi_result = self.perform_search_request(doi_search_url)
+
+                    if doi_result:
+                        title = doi_result['message'].get('title', '')[0]
+                        author_names = [f"{author.get('family', '')}" for author in
+                                        doi_result['message'].get('author', [])]
+                        first_author = author_names[0]
+                        last_author = author_names[-1]
+                        pub_date = doi_result['message'].get('created', {}).get('date-parts', [])[0][0] if doi_result[
+                            'message'].get('created') else ''
+                        source = doi_result['message'].get('container-title', [''])[0]
+
+                        # 要約した情報をテキストボックスに表示
+                        summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
+                        self.textbox2.setText(summary_text)
+                    else:
+                        self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+                else:
+                    title = item.get('title', '')[0]
+                    author_names = [f"{author.get('given', '')} {author.get('family', '')}" for author in
+                                    item.get('author', [])]
+                    pub_date = item.get('created', {}).get('date-parts', [])[0][0] if item.get('created') else ''
+                    source = item.get('container-title', [''])[0]
+
+                    # 要約した情報をテキストボックスに表示
+                    summary_text = f'{", ".join(author_names)} ({source} {pub_date}) {title}'
+                    self.textbox2.setText(summary_text)
+
+            else:
+                self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+        except Exception as e:
+            print(f'Crossref検索エラー: {e}')
+            self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+    def show_arxiv_summary(self, result_data):
+        try:
+            if 'feed' in result_data and 'entry' in result_data['feed'] and result_data['feed']['entry']:
+                # arXiv検索の結果から必要な情報を抽出
+                entry = result_data['feed']['entry'][0]
+                title = entry.get('title', '')
+                author_names = [author['name'] for author in entry.get('author', [])]
+                pub_date = entry.get('published', '')
+                source = entry.get('arxiv_primary_category', {}).get('term', '')
+
+                # 要約した情報をテキストボックスに表示
+                summary_text = f'{", ".join(author_names)} ({source} {pub_date}) {title}'
+                self.textbox2.setText(summary_text)
+
+            else:
+                self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+        except Exception as e:
+            print(f'arXiv検索エラー: {e}')
+            self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = PubmedSearchApp()
+    window = SearchApp()
     window.show()
     sys.exit(app.exec_())
