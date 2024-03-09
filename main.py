@@ -6,6 +6,7 @@ import requests
 import re
 from bs4 import BeautifulSoup
 import feedparser
+from Levenshtein import distance
 
 class LiteratureSearchApp(QWidget):
     def __init__(self):
@@ -21,6 +22,7 @@ class LiteratureSearchApp(QWidget):
 
         # プルダウンリスト
         self.search_type_combo = QComboBox()
+        self.search_type_combo.setFixedWidth(16 * self.search_type_combo.fontMetrics().width('X'))  # 20文字分の横幅
         self.search_type_combo.addItem('Pubmed検索')
         self.search_type_combo.addItem('Crossref検索')
         self.search_type_combo.addItem('arXiv検索')
@@ -43,10 +45,16 @@ class LiteratureSearchApp(QWidget):
         self.textbox2.setPlaceholderText('検索結果がここに表示されます')
         self.textbox2.setFixedHeight(3 * self.textbox2.fontMetrics().lineSpacing())  # 3行分の縦幅
 
+        # 再検索ボタン
+        self.research_button = QPushButton('再検索')
+        self.research_button.setFixedWidth(7 * self.research_button.fontMetrics().width('X'))  # 5文字分の横幅
+        self.research_button.clicked.connect(self.research)
+
         layout.addWidget(self.search_type_combo)
         layout.addWidget(self.textbox1)
         layout.addLayout(search_button_layout)
         layout.addWidget(self.textbox2)
+        layout.addWidget(self.research_button)
 
         self.setLayout(layout)
 
@@ -91,12 +99,11 @@ class LiteratureSearchApp(QWidget):
         elif search_type == 'GoogleScholar検索':
             self.googlescholar_search(search_term)
 
-    def pubmed_search(self, search_term):
+    def pubmed_search(self, search_term, exact=False):
         # Pubmed IDかどうかの判定
         #if search_term.isdigit() and len(search_term) == 8:
         if re.match(r'^\d{8}$', search_term):
             search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={search_term}'
-            print("Pubmed ID検索実行")
         else:
             search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&sort=relevance&retmode=json&term={search_term}'
             self.textbox2.setText("Pubmedキーワード検索実行")
@@ -104,11 +111,11 @@ class LiteratureSearchApp(QWidget):
         result_data = self.perform_search_request(search_url)
 
         if result_data:
-            self.show_pubmed_summary(result_data)
+            self.show_pubmed_summary(result_data, search_term, exact)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def crossref_search(self, search_term):
+    def crossref_search(self, search_term, exact=False):
         # DOIかどうかの判定
         if 'https://doi.org/' in search_term:
             doi = search_term.replace('https://doi.org/', '')
@@ -125,11 +132,11 @@ class LiteratureSearchApp(QWidget):
         result_data = self.perform_search_request(search_url)
 
         if result_data:
-            self.show_crossref_summary(result_data)
+            self.show_crossref_summary(result_data, search_term, exact)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def arxiv_search(self, search_term):
+    def arxiv_search(self, search_term, exact=False):
         # arXiv IDかどうかの判定
         if 'arXiv:' in search_term:
             arxiv_id = search_term.replace('arXiv:', '')
@@ -142,16 +149,16 @@ class LiteratureSearchApp(QWidget):
         result_data = feedparser.parse(search_url)
 
         if result_data:
-            self.show_arxiv_summary(result_data)
+            self.show_arxiv_summary(result_data, search_term, exact)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def googlescholar_search(self, search_term):
+    def googlescholar_search(self, search_term, exact=False):
         search_url = f'https://scholar.google.co.jp/scholar?hl=ja&as_sdt=0%2C5&num=10&q={search_term}'
         result_data = requests.get(search_url).text
 
         if result_data:
-            self.show_googlescholar_summary(result_data)
+            self.show_googlescholar_summary(result_data, search_term, exact)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
@@ -172,7 +179,7 @@ class LiteratureSearchApp(QWidget):
             print(f'検索エラー: {e}')
             return None
 
-    def show_pubmed_summary(self, result_data):
+    def show_pubmed_summary(self, result_data,search_term, exact):
         try:
             # Pubmedキーワード検索の場合
             if 'esearchresult' in result_data:
@@ -184,9 +191,28 @@ class LiteratureSearchApp(QWidget):
                     return
 
                 # Pubmed ID検索を行う
-                pubmed_id = id_list[0]
-                pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
-                pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
+                if exact == False:
+                    pubmed_id = id_list[0]
+                    pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
+                    pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
+                if exact == True:
+                    closest_distance = float('inf')
+                    pubmed_id = ''
+                    for i in id_list[:10]:
+                        pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={i}'
+                        pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
+                        paper = pubmed_id_result['result'][i].get('title', '')
+
+                        # 距離を計算
+                        current_distance = distance(search_term, paper)
+
+                        # 最も距離が短い論文を更新
+                        if current_distance < closest_distance:
+                            closest_distance = current_distance
+                            pubmed_id = i
+
+                    pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
+                    pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
 
             # Pubmed ID検索の場合
             else:
@@ -214,22 +240,41 @@ class LiteratureSearchApp(QWidget):
             print(f'Pubmed検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def show_crossref_summary(self, result_data):
+    def show_crossref_summary(self, result_data,search_term, exact):
         try:
             # Crossrefキーワード検索の場合
-            print("Crossrefキーワード検索")
             if 'message' in result_data and result_data['message'].get('items'):
                 items = result_data['message']['items']
                 # journal-articleの最初の結果を検索
-                item = next(
-                    (i for i in items if i.get("type") == 'journal-article'),
-                    None
-                )
+                if exact == False:
+                    item = next(
+                        (i for i in items if i.get("type") == 'journal-article'),
+                        None
+                    )
+                    # DOIを使って検索
+                    if 'DOI' in item:
+                        doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
+                        doi_result = self.perform_search_request(doi_search_url)
 
-                # DOIを使って検索
-                if 'DOI' in item:
-                    print(item["DOI"])
-                    doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
+                if exact == True:
+                    item_list = [i for i in items if i.get("type") == 'journal-article']
+
+                    closest_distance = float('inf')
+                    closest_item = ''
+                    for item in item_list[:10]:
+                        doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
+                        doi_result = self.perform_search_request(doi_search_url)
+                        paper = doi_result['message'].get('title', '')[0]
+
+                        # 距離を計算
+                        current_distance = distance(search_term, paper)
+
+                        # 最も距離が短い論文を更新
+                        if current_distance < closest_distance:
+                            closest_distance = current_distance
+                            closest_item = item
+
+                    doi_search_url = f'https://api.crossref.org/works/{closest_item["DOI"]}'
                     doi_result = self.perform_search_request(doi_search_url)
 
             # Crossref　DOI検索の場合
@@ -246,7 +291,6 @@ class LiteratureSearchApp(QWidget):
             # 要約した情報をテキストボックスに表示
             summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
             summary_text = self.remove_special_characters(summary_text)
-            print(summary_text)
             self.textbox2.setText(summary_text)
             QGuiApplication.clipboard().setText(summary_text)
 
@@ -254,10 +298,26 @@ class LiteratureSearchApp(QWidget):
             print(f'Crossref検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def show_arxiv_summary(self, result_data):
+    def show_arxiv_summary(self, result_data,search_term, exact):
         try:
             entries = result_data['entries']
-            entry = entries[0]
+            if exact == False:
+                entry = entries[0]
+
+            if exact == True:
+                closest_distance = float('inf')
+                closest_entry = ''
+                for entry in entries[:10]:
+                    paper = entry.title.replace('\n ', '')
+
+                    # 距離を計算
+                    current_distance = distance(search_term, paper)
+
+                    # 最も距離が短い論文を更新
+                    if current_distance < closest_distance:
+                        closest_distance = current_distance
+                        closest_entry = entry
+                entry = closest_entry
 
             authors = entry.authors
             if len(authors) == 1:
@@ -281,29 +341,61 @@ class LiteratureSearchApp(QWidget):
             print(f'arXiv検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def show_googlescholar_summary(self, result_data):
+    def show_googlescholar_summary(self, result_data,search_term, exact):
         try:
             # 参照：https://qiita.com/kuto/items/9730037c282da45c1d2b
             soup = BeautifulSoup(result_data, "html.parser") # BeautifulSoupの初期化
             tags1 = soup.find_all("h3", {"class": "gs_rt"}) # title
-            title = tags1[0].text.replace("[HTML]","").lstrip()
-
             tags2 = soup.find_all("div", {"class": "gs_fmaa"})  # writer
-            authors = tags2[0].text
-            if len(authors.split(","))==1:
-                author_summary = authors.split(" ")[1]
-            else:
-                first_author = authors.split(",")[0].lstrip().split(" ")[1]
-                last_author = authors.split(",")[-1].lstrip().split(" ")[1]
-                author_summary = f"{first_author} {last_author}"
-
             tags3 = soup.find_all("div", {"class": "gs_a gs_fma_p"})  # writer&year
-            author_year = tags3[0].text
-            A = authors
-            B = author_year
-            dif = self.remove_matching_string(A, B)
-            journal_title = dif.split(",")[0]
-            year = re.sub(r'\D', '', author_year)
+            if exact == False:
+                title = tags1[0].text.replace("[HTML]","").lstrip()
+                authors = tags2[0].text
+                if len(authors.split(","))==1:
+                    author_summary = authors.split(" ")[1]
+                else:
+                    first_author = authors.split(",")[0].lstrip().split(" ")[1]
+                    last_author = authors.split(",")[-1].lstrip().split(" ")[1]
+                    author_summary = f"{first_author} {last_author}"
+
+                author_year = tags3[0].text
+                A = authors
+                B = author_year
+                dif = self.remove_matching_string(A, B)
+                journal_title = dif.split(",")[0]
+                year = re.sub(r'\D', '', author_year)
+
+            if exact == True:
+                closest_distance = float('inf')
+                closest_tag_num = ''
+                num = 0
+                for tag1 in tags1[:10]:
+                    paper = tag1.text.replace("[HTML]","").lstrip()
+
+                    # 距離を計算
+                    current_distance = distance(search_term, paper)
+
+                    # 最も距離が短い論文を更新
+                    if current_distance < closest_distance:
+                        closest_distance = current_distance
+                        closest_tag_num = num
+                    num += 1
+
+                title = tags1[closest_tag_num].text.replace("[HTML]","").lstrip()
+                authors = tags2[closest_tag_num].text
+                if len(authors.split(","))==1:
+                    author_summary = authors.split(" ")[1]
+                else:
+                    first_author = authors.split(",")[0].lstrip().split(" ")[1]
+                    last_author = authors.split(",")[-1].lstrip().split(" ")[1]
+                    author_summary = f"{first_author} {last_author}"
+
+                author_year = tags3[closest_tag_num].text
+                A = authors
+                B = author_year
+                dif = self.remove_matching_string(A, B)
+                journal_title = dif.split(",")[0]
+                year = re.sub(r'\D', '', author_year)
 
             # 要約した情報をテキストボックスに表示
             summary_text = f"{author_summary} ({journal_title} {year}) {title}"
@@ -321,6 +413,19 @@ class LiteratureSearchApp(QWidget):
         result = re.sub(pattern, '', input_string)
         return result
 
+    def research(self):
+        search_term = self.textbox1.text()
+        search_type = self.search_type_combo.currentText()
+
+        # それぞれの検索メソッドを呼び出し、検索結果を取得
+        if search_type == 'Pubmed検索':
+            result_data = self.pubmed_search(search_term, exact=True)
+        elif search_type == 'Crossref検索':
+            result_data = self.crossref_search(search_term, exact=True)
+        elif search_type == 'arXiv検索':
+            result_data = self.arxiv_search(search_term, exact=True)
+        elif search_type == 'GoogleScholar検索':
+            result_data = self.googlescholar_search(search_term, exact=True)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
