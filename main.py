@@ -5,6 +5,7 @@ from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QClipboard, QGuiApplication
 import requests
 import re
 from bs4 import BeautifulSoup
+import feedparser
 
 class LiteratureSearchApp(QWidget):
     def __init__(self):
@@ -134,48 +135,24 @@ class LiteratureSearchApp(QWidget):
             arxiv_id = search_term.replace('arXiv:', '')
             search_url = f'http://export.arxiv.org/api/query?&sortBy=relevance&sortOrder=ascending&max_results=10&id_list={arxiv_id}'
         else:
-            search_url = f'http://export.arxiv.org/api/query?&sortBy=relevance&sortOrder=ascending&max_results=10&search_query=%22{search_term}%22'
+            search_url = f'http://export.arxiv.org/api/query?&sortBy=relevance&sortOrder=ascending&max_results=10&search_query={search_term}'
+            search_url = search_url.replace(" ", "%20")
+            search_url = search_url.replace("-", "%20")
 
-        print(search_url)
-        result_data = self.perform_search_request(search_url)
-        #print("test")
+        result_data = feedparser.parse(search_url)
 
         if result_data:
             self.show_arxiv_summary(result_data)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def googlescholar_search(self, keyword):
-        try:
-            # 参照：https://qiita.com/kuto/items/9730037c282da45c1d2b
-            html_doc = requests.get("https://scholar.google.co.jp/scholar?hl=ja&as_sdt=0%2C5&num=10&q=" + keyword).text
-            soup = BeautifulSoup(html_doc, "html.parser") # BeautifulSoupの初期化
-            tags1 = soup.find_all("h3", {"class": "gs_rt"}) # title
-            title = tags1[0].text.replace("[HTML]","").lstrip()
+    def googlescholar_search(self, search_term):
+        search_url = f'https://scholar.google.co.jp/scholar?hl=ja&as_sdt=0%2C5&num=10&q={search_term}'
+        result_data = requests.get(search_url).text
 
-            tags2 = soup.find_all("div", {"class": "gs_fmaa"})  # writer
-            authors = tags2[0].text
-            if len(authors.split(","))==1:
-                author_summary = authors.split(" ")[1]
-            else:
-                first_author = authors.split(",")[0].lstrip().split(" ")[1]
-                last_author = authors.split(",")[-1].lstrip().split(" ")[1]
-                author_summary = f"{first_author} {last_author}"
-
-            tags3 = soup.find_all("div", {"class": "gs_a gs_fma_p"})  # writer&year
-            author_year = tags3[0].text
-            A = authors
-            B = author_year
-            dif = self.remove_matching_string(A, B)
-            journal_title = dif.split(",")[0]
-            year = re.sub(r'\D', '', author_year)
-
-            # 要約した情報をテキストボックスに表示
-            summary_text = f"{author_summary} ({journal_title} {year}) {title}"
-            self.textbox2.setText(summary_text)
-
-        except Exception as e:
-            print(f'GoogleScholar検索エラー: {e}')
+        if result_data:
+            self.show_googlescholar_summary(result_data)
+        else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
     def remove_matching_string(self, A, B):
@@ -230,6 +207,7 @@ class LiteratureSearchApp(QWidget):
 
             # 要約した情報をテキストボックスに表示
             summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
+            summary_text = self.remove_special_characters(summary_text)
             self.textbox2.setText(summary_text)
 
         except Exception as e:
@@ -267,6 +245,7 @@ class LiteratureSearchApp(QWidget):
 
             # 要約した情報をテキストボックスに表示
             summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
+            summary_text = self.remove_special_characters(summary_text)
             print(summary_text)
             self.textbox2.setText(summary_text)
             QGuiApplication.clipboard().setText(summary_text)
@@ -277,21 +256,70 @@ class LiteratureSearchApp(QWidget):
 
     def show_arxiv_summary(self, result_data):
         try:
-            entry = result_data['feed']['entry'][0]
-            title = entry.get('title', '')
-            author_names = [author['name'] for author in entry.get('author', [])]
-            first_author = author_names[0]
-            last_author = author_names[-1]
-            pub_date = entry.get('published', '')
-            source = entry.get('arxiv_primary_category', {}).get('term', '')
+            entries = result_data['entries']
+            entry = entries[0]
 
-            summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
+            authors = entry.authors
+            if len(authors) == 1:
+                author_summary = authors[0]["name"].split(" ")[1]
+            else:
+                first_author = authors[0]["name"].split(" ")[1]
+                last_author = authors[-1]["name"].split(" ")[1]
+                author_summary = f"{first_author} {last_author}"
+
+            title  = entry.title.replace('\n ', '')
+            date   = entry.published_parsed
+            year = date[0]
+            journal = "arXiv"
+
+            summary_text = f"{author_summary} ({journal} {year}) {title}"
+            summary_text = self.remove_special_characters(summary_text)
             self.textbox2.setText(summary_text)
             QGuiApplication.clipboard().setText(summary_text)
 
         except Exception as e:
             print(f'arXiv検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+    def show_googlescholar_summary(self, result_data):
+        try:
+            # 参照：https://qiita.com/kuto/items/9730037c282da45c1d2b
+            soup = BeautifulSoup(result_data, "html.parser") # BeautifulSoupの初期化
+            tags1 = soup.find_all("h3", {"class": "gs_rt"}) # title
+            title = tags1[0].text.replace("[HTML]","").lstrip()
+
+            tags2 = soup.find_all("div", {"class": "gs_fmaa"})  # writer
+            authors = tags2[0].text
+            if len(authors.split(","))==1:
+                author_summary = authors.split(" ")[1]
+            else:
+                first_author = authors.split(",")[0].lstrip().split(" ")[1]
+                last_author = authors.split(",")[-1].lstrip().split(" ")[1]
+                author_summary = f"{first_author} {last_author}"
+
+            tags3 = soup.find_all("div", {"class": "gs_a gs_fma_p"})  # writer&year
+            author_year = tags3[0].text
+            A = authors
+            B = author_year
+            dif = self.remove_matching_string(A, B)
+            journal_title = dif.split(",")[0]
+            year = re.sub(r'\D', '', author_year)
+
+            # 要約した情報をテキストボックスに表示
+            summary_text = f"{author_summary} ({journal_title} {year}) {title}"
+            summary_text = self.remove_special_characters(summary_text)
+            self.textbox2.setText(summary_text)
+            QGuiApplication.clipboard().setText(summary_text)
+
+        except Exception as e:
+            print(f'GoogleScholar検索エラー: {e}')
+            self.textbox2.setText('エラー: 文献が見つかりませんでした')
+
+    def remove_special_characters(self, input_string):
+        # 参照：https://x.gd/f0fcI
+        pattern = r'[\\|/|:|?|.|"|<|>|\|]'
+        result = re.sub(pattern, '', input_string)
+        return result
 
 
 if __name__ == '__main__':
