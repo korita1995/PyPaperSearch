@@ -21,7 +21,7 @@ class LiteratureSearchApp(QWidget):
 
         # プルダウンリスト
         self.search_type_combo = QComboBox()
-        self.search_type_combo.setFixedWidth(16 * self.search_type_combo.fontMetrics().width('X'))  # 20文字分の横幅
+        self.search_type_combo.setFixedWidth(16 * self.search_type_combo.fontMetrics().width('X'))  # 16文字分の横幅
         self.search_type_combo.addItem('Pubmed検索')
         self.search_type_combo.addItem('Crossref検索')
         self.search_type_combo.addItem('arXiv検索')
@@ -45,7 +45,7 @@ class LiteratureSearchApp(QWidget):
 
         # 再検索ボタン
         self.research_button = QPushButton('再検索')
-        self.research_button.setFixedWidth(7 * self.research_button.fontMetrics().width('X'))  # 5文字分の横幅
+        self.research_button.setFixedWidth(7 * self.research_button.fontMetrics().width('X'))  # 7文字分の横幅
         self.research_button.clicked.connect(self.research)
 
         layout.addWidget(self.search_type_combo)
