@@ -4,7 +4,6 @@ from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QClipboard, QGuiApplication
 import requests
 import re
-from bs4 import BeautifulSoup
 import feedparser
 from Levenshtein import distance
 
@@ -26,7 +25,6 @@ class LiteratureSearchApp(QWidget):
         self.search_type_combo.addItem('Pubmed検索')
         self.search_type_combo.addItem('Crossref検索')
         self.search_type_combo.addItem('arXiv検索')
-        self.search_type_combo.addItem('GoogleScholar検索')
 
         # テキストボックス1
         self.textbox1 = QLineEdit()
@@ -96,8 +94,6 @@ class LiteratureSearchApp(QWidget):
             self.crossref_search(search_term)
         elif search_type == 'arXiv検索':
             self.arxiv_search(search_term)
-        elif search_type == 'GoogleScholar検索':
-            self.googlescholar_search(search_term)
 
     def pubmed_search(self, search_term, exact=False):
         # Pubmed IDかどうかの判定
@@ -150,15 +146,6 @@ class LiteratureSearchApp(QWidget):
 
         if result_data:
             self.show_arxiv_summary(result_data, search_term, exact)
-        else:
-            self.textbox2.setText('エラー: 文献が見つかりませんでした')
-
-    def googlescholar_search(self, search_term, exact=False):
-        search_url = f'https://scholar.google.co.jp/scholar?hl=ja&as_sdt=0%2C5&num=10&q={search_term}'
-        result_data = requests.get(search_url).text
-
-        if result_data:
-            self.show_googlescholar_summary(result_data, search_term, exact)
         else:
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
@@ -341,72 +328,6 @@ class LiteratureSearchApp(QWidget):
             print(f'arXiv検索エラー: {e}')
             self.textbox2.setText('エラー: 文献が見つかりませんでした')
 
-    def show_googlescholar_summary(self, result_data,search_term, exact):
-        try:
-            # 参照：https://qiita.com/kuto/items/9730037c282da45c1d2b
-            soup = BeautifulSoup(result_data, "html.parser") # BeautifulSoupの初期化
-            tags1 = soup.find_all("h3", {"class": "gs_rt"}) # title
-            tags2 = soup.find_all("div", {"class": "gs_fmaa"})  # writer
-            tags3 = soup.find_all("div", {"class": "gs_a gs_fma_p"})  # writer&year
-            if exact == False:
-                title = tags1[0].text.replace("[HTML]","").lstrip()
-                authors = tags2[0].text
-                if len(authors.split(","))==1:
-                    author_summary = authors.split(" ")[1]
-                else:
-                    first_author = authors.split(",")[0].lstrip().split(" ")[1]
-                    last_author = authors.split(",")[-1].lstrip().split(" ")[1]
-                    author_summary = f"{first_author} {last_author}"
-
-                author_year = tags3[0].text
-                A = authors
-                B = author_year
-                dif = self.remove_matching_string(A, B)
-                journal_title = dif.split(",")[0]
-                year = re.sub(r'\D', '', author_year)
-
-            if exact == True:
-                closest_distance = float('inf')
-                closest_tag_num = ''
-                num = 0
-                for tag1 in tags1[:10]:
-                    paper = tag1.text.replace("[HTML]","").lstrip()
-
-                    # 距離を計算
-                    current_distance = distance(search_term, paper)
-
-                    # 最も距離が短い論文を更新
-                    if current_distance < closest_distance:
-                        closest_distance = current_distance
-                        closest_tag_num = num
-                    num += 1
-
-                title = tags1[closest_tag_num].text.replace("[HTML]","").lstrip()
-                authors = tags2[closest_tag_num].text
-                if len(authors.split(","))==1:
-                    author_summary = authors.split(" ")[1]
-                else:
-                    first_author = authors.split(",")[0].lstrip().split(" ")[1]
-                    last_author = authors.split(",")[-1].lstrip().split(" ")[1]
-                    author_summary = f"{first_author} {last_author}"
-
-                author_year = tags3[closest_tag_num].text
-                A = authors
-                B = author_year
-                dif = self.remove_matching_string(A, B)
-                journal_title = dif.split(",")[0]
-                year = re.sub(r'\D', '', author_year)
-
-            # 要約した情報をテキストボックスに表示
-            summary_text = f"{author_summary} ({journal_title} {year}) {title}"
-            summary_text = self.remove_special_characters(summary_text)
-            self.textbox2.setText(summary_text)
-            QGuiApplication.clipboard().setText(summary_text)
-
-        except Exception as e:
-            print(f'GoogleScholar検索エラー: {e}')
-            self.textbox2.setText('エラー: 文献が見つかりませんでした')
-
     def remove_special_characters(self, input_string):
         # 参照：https://x.gd/f0fcI
         pattern = r'[\\|/|:|?|.|"|<|>|\|]'
@@ -424,8 +345,6 @@ class LiteratureSearchApp(QWidget):
             result_data = self.crossref_search(search_term, exact=True)
         elif search_type == 'arXiv検索':
             result_data = self.arxiv_search(search_term, exact=True)
-        elif search_type == 'GoogleScholar検索':
-            result_data = self.googlescholar_search(search_term, exact=True)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
