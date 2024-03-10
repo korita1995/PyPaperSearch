@@ -235,16 +235,19 @@ class LiteratureSearchApp(QWidget):
                 # journal-articleの最初の結果を検索
                 if exact == False:
                     item = next(
-                        (i for i in items if i.get("type") == 'journal-article'),
+                        (i for i in items if i.get("type") == 'journal-article' or i.get("type") == 'posted-content'),
                         None
                     )
+                    item_type = item.get("type")
+                    print(item)
                     # DOIを使って検索
                     if 'DOI' in item:
                         doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
                         doi_result = self.perform_search_request(doi_search_url)
 
                 if exact == True:
-                    item_list = [i for i in items if i.get("type") == 'journal-article']
+                    item_list = [i for i in items if i.get("type") == 'journal-article' or i.get("type") == 'posted-content']
+                    #print(item_list)
 
                     closest_distance = float('inf')
                     closest_item = ''
@@ -261,19 +264,25 @@ class LiteratureSearchApp(QWidget):
                             closest_distance = current_distance
                             closest_item = item
 
+                    item_type = closest_item.get("type")
                     doi_search_url = f'https://api.crossref.org/works/{closest_item["DOI"]}'
                     doi_result = self.perform_search_request(doi_search_url)
 
             # Crossref　DOI検索の場合
             else:
                 doi_result = result_data
+                item_type = doi_result['message'].get("type")
 
             title = doi_result['message'].get('title', '')[0]
             author_names = [f"{author.get('family', '')}" for author in doi_result['message'].get('author', [])]
             first_author = author_names[0]
             last_author = author_names[-1]
             pub_date = doi_result['message'].get('created', {}).get('date-parts', [])[0][0] if doi_result['message'].get('created') else ''
-            source = doi_result['message'].get('short-container-title', [''])[0]
+            if item_type == 'journal-article':
+                source = doi_result['message'].get('short-container-title', [''])[0]
+            elif item_type == 'posted-content':
+                source = doi_result['message'].get('institution', [''])[0].get("name")
+                print(source)
 
             # 要約した情報をテキストボックスに表示
             summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
