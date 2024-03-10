@@ -239,7 +239,6 @@ class LiteratureSearchApp(QWidget):
                         None
                     )
                     item_type = item.get("type")
-                    print(item)
                     # DOIを使って検索
                     if 'DOI' in item:
                         doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
@@ -247,7 +246,6 @@ class LiteratureSearchApp(QWidget):
 
                 if exact == True:
                     item_list = [i for i in items if i.get("type") == 'journal-article' or i.get("type") == 'posted-content']
-                    #print(item_list)
 
                     closest_distance = float('inf')
                     closest_item = ''
@@ -282,7 +280,6 @@ class LiteratureSearchApp(QWidget):
                 source = doi_result['message'].get('short-container-title', [''])[0]
             elif item_type == 'posted-content':
                 source = doi_result['message'].get('institution', [''])[0].get("name")
-                print(source)
 
             # 要約した情報をテキストボックスに表示
             summary_text = f'{first_author} {last_author} ({source} {pub_date}) {title}'
