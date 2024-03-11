@@ -3,4 +3,4 @@
 
 pip install pyinstaller
 
-pyinstaller main.py --onefile --noconsole
+pyinstaller main.py --onefile --noconsole --icon=app.ico
