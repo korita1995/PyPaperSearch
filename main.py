@@ -6,6 +6,7 @@ import requests
 import re
 import feedparser
 from Levenshtein import distance
+import os
 
 class LiteratureSearchApp(QWidget):
     def __init__(self):
@@ -63,18 +64,19 @@ class LiteratureSearchApp(QWidget):
         self.search_clipboard_button.clicked.connect(self.search_from_clipboard)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls() and event.mimeData().urls()[0].toString().endsWith('.pdf'):
+        if event.mimeData().hasUrls() and event.mimeData().urls()[0].toString().endswith('.pdf'):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent):
         file_path = event.mimeData().urls()[0].toLocalFile()
-        self.textbox1.setText(f'ドロップされたファイル: {file_path}')
 
         # ファイル名を取得
-        file_name = file_path.split("/")[-1]
+        file_name = os.path.splitext(os.path.basename(file_path))[0]
+        self.textbox1.setText(f'{file_name}')
+        search_type = self.search_type_combo.currentText()
 
         # キーワード検索を行う
-        self.perform_search(file_name)
+        self.perform_search(file_name, search_type)
 
     def search_from_input(self):
         search_term = self.textbox1.text()
