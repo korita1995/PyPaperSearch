@@ -1,4 +1,5 @@
 # PyPaperSearch
+ウィンドウ内アイコン表示のため、app.icoを実行ファイルと同じフォルダに入れてください<br>
 ## Python開発環境(Rye)
 rye init PyPaperSearch<br>
 cd PyPaperSearch<br>
