@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit
 from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QClipboard, QGuiApplication
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QClipboard, QGuiApplication, QIcon
 import requests
 import re
 import feedparser
@@ -17,6 +17,9 @@ class LiteratureSearchApp(QWidget):
     def initUI(self):
         self.setWindowTitle('文献検索アプリ')
         self.setGeometry(100, 100, 500, 300)
+
+        # ウィンドウアイコンの設定
+        self.setWindowIcon(QIcon('app.ico'))
 
         layout = QVBoxLayout()
 
@@ -347,8 +350,16 @@ class LiteratureSearchApp(QWidget):
         elif search_type == 'arXiv検索':
             result_data = self.arxiv_search(search_term, exact=True)
 
+def ico_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+    
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(ico_path('app.ico')))
     window = LiteratureSearchApp()
     window.show()
     sys.exit(app.exec_())
