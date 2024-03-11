@@ -113,14 +113,8 @@ class LiteratureSearchApp(QWidget):
 
     def crossref_search(self, search_term, exact=False):
         # DOIかどうかの判定
-        if 'https://doi.org/' in search_term:
-            doi = search_term.replace('https://doi.org/', '')
-            search_url = f'https://api.crossref.org/works/{doi}'
-        elif 'doi:' in search_term:
-            doi = search_term.replace('doi:', '').lstrip()
-            search_url = f'https://api.crossref.org/works/{doi}'
-        elif 'DOI:' in search_term:
-            doi = search_term.replace('DOI:', '').lstrip()
+        if 'https://doi.org/' in search_term or 'doi:' in search_term or 'DOI:' in search_term:
+            doi = re.sub(r'https://doi.org/|doi:|DOI:', '', search_term).lstrip()
             search_url = f'https://api.crossref.org/works/{doi}'
         else:
             search_url = f'https://api.crossref.org/works?sort=relevance&query={search_term}'
@@ -139,8 +133,7 @@ class LiteratureSearchApp(QWidget):
             search_url = f'http://export.arxiv.org/api/query?&sortBy=relevance&sortOrder=ascending&max_results=10&id_list={arxiv_id}'
         else:
             search_url = f'http://export.arxiv.org/api/query?&sortBy=relevance&sortOrder=ascending&max_results=10&search_query={search_term}'
-            search_url = search_url.replace(" ", "%20")
-            search_url = search_url.replace("-", "%20")
+            search_url = search_url.replace(" ", "%20").replace("-", "%20")
 
         result_data = feedparser.parse(search_url)
 
@@ -178,11 +171,11 @@ class LiteratureSearchApp(QWidget):
                     return
 
                 # Pubmed ID検索を行う
-                if exact == False:
+                if not exact:
                     pubmed_id = id_list[0]
                     pubmed_id_search_url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={pubmed_id}'
                     pubmed_id_result = self.perform_search_request(pubmed_id_search_url)
-                if exact == True:
+                if exact:
                     closest_distance = float('inf')
                     pubmed_id = ''
                     for i in id_list[:10]:
@@ -233,7 +226,7 @@ class LiteratureSearchApp(QWidget):
             if 'message' in result_data and result_data['message'].get('items'):
                 items = result_data['message']['items']
                 # journal-articleの最初の結果を検索
-                if exact == False:
+                if not exact:
                     item = next(
                         (i for i in items if i.get("type") == 'journal-article' or i.get("type") == 'posted-content'),
                         None
@@ -244,7 +237,7 @@ class LiteratureSearchApp(QWidget):
                         doi_search_url = f'https://api.crossref.org/works/{item["DOI"]}'
                         doi_result = self.perform_search_request(doi_search_url)
 
-                if exact == True:
+                if exact:
                     item_list = [i for i in items if i.get("type") == 'journal-article' or i.get("type") == 'posted-content']
 
                     closest_distance = float('inf')
@@ -294,10 +287,10 @@ class LiteratureSearchApp(QWidget):
     def show_arxiv_summary(self, result_data,search_term, exact):
         try:
             entries = result_data['entries']
-            if exact == False:
+            if not exact:
                 entry = entries[0]
 
-            if exact == True:
+            if exact:
                 closest_distance = float('inf')
                 closest_entry = ''
                 for entry in entries[:10]:
